@@ -1,0 +1,6 @@
+.git
+pycache
+*.pyc
+.secrets.yml
+.env
+.env.prod

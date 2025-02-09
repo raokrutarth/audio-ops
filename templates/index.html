@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Transcription</title>
+    <script src="https://unpkg.com/htmx.org@1.9.4"></script>
+    <style>
+        #transcription {
+            min-height: 100px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 10px;
+            position: relative;
+        }
+
+        .loading {
+            display: none;
+        }
+
+        #clear-transcription {
+            display: none;
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: white;
+            color: white;
+            border: none;
+            cursor: pointer;
+            padding: 3px 6px;
+            font-size: 14px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>KR Audio Transcription Demo</h1>
+    <button id="record">Record</button>
+    <button id="stop" disabled>Stop</button>
+    <span id="timer">0ms</span>
+    <div id="loading" class="loading">Processing...</div>
+
+    <div id="transcription">
+        <button id="clear-transcription">❌</button>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        let timerInterval;
+        let elapsedTime = 0;
+
+        document.getElementById("record").addEventListener("click", async () => {
+            // Clear previous transcription
+            document.getElementById("transcription").innerHTML = '<button id="clear-transcription" style="display:none;"></button>';
+            document.getElementById("clear-transcription").style.display = "none";
+
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const options = { mimeType: 'audio/webm;codecs=opus' }
+            mediaRecorder = new MediaRecorder(stream, options);
+            if (!MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+                console.error("audio/webm;codecs=opus is not supported");
+            }
+            document.getElementById("record").disabled = true;
+            document.getElementById("stop").disabled = false;
+            isRecording = true;
+            audioChunks = [];
+            elapsedTime = 0;
+            document.getElementById("timer").textContent = "0ms";
+
+            mediaRecorder.ondataavailable = event => {
+                if (isRecording) {
+                    audioChunks.push(event.data);
+                }
+            };
+            mediaRecorder.start(1000); // record in 1 sec chunks
+            timerInterval = setInterval(() => {
+                elapsedTime += 100;
+                document.getElementById("timer").textContent = `${elapsedTime}ms`;
+            }, 100);
+        });
+
+        document.getElementById("stop").addEventListener("click", () => {
+            isRecording = false;
+            mediaRecorder.stop();
+            clearInterval(timerInterval);
+            document.getElementById("record").disabled = false;
+            document.getElementById("stop").disabled = true;
+            // console.log("audioChunks length:", audioChunks.length); // Add this line
+            sendAudio(new Blob(audioChunks, { type: mediaRecorder.mimeType }));
+        });
+
+        async function sendAudio(blob) {
+            document.getElementById("loading").style.display = "block";
+
+            const formData = new FormData();
+            formData.append("audio", blob, "recorded-audio.webm");
+
+            const response = await fetch("/transcribe", {
+                method: "POST",
+                body: formData
+            });
+
+            const text = await response.text();
+            document.getElementById("loading").style.display = "none";
+
+            const div = document.createElement("div");
+            div.textContent = text;
+            document.getElementById("transcription").appendChild(div);
+            document.getElementById("clear-transcription").style.display = "block";
+        }
+
+        document.getElementById("transcription").addEventListener("click", (event) => {
+            if (event.target.id === "clear-transcription") {
+                document.getElementById("transcription").innerHTML = '<button id="clear-transcription" style="display:none;">❌</button>';
+            }
+        });
+    </script>
+</body>
+
+</html>
